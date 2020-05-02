@@ -3,28 +3,101 @@ title: "Cortina-Camila-ADA-homework-3"
 author: "Camila Cortina"
 date: "4/29/2020"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+##Challenge 1
+```{r}
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(tidyr)
+library(broom)
+#importing dataset
+d<- read_csv("KamilarAndCooperData.csv", col_names = TRUE)
+
+model<- lm(MaxLongevity_m ~ Brain_Size_Species_Mean, data=d)
+summary(model)
+#The slope of B1 is 1.2180
+
+#90% CI for the slope 
+alpha<-.1
+(CI <- tidy(model, conf.int = TRUE, conf.level = 1-alpha))
+
+#90% Confidence Intervals 
+sd <- glance(model) %>% pull(sigma) # sd deviation of residuals
+ci <- model %>% augment() %>%
+  mutate(
+    c.lwr = .fitted - qt(1 - alpha/2, nrow(d) - 2) * .se.fit,
+    c.upr = .fitted + qt(1 - alpha/2, nrow(d) - 2) * .se.fit,
+    se.prediction = sqrt(sd^2 + .se.fit^2),
+    p.lwr = .fitted - qt(1 - alpha / 2, nrow(d) - 2) * se.prediction,
+    p.upr = .fitted + qt(1 - alpha / 2, nrow(d) - 2) * se.prediction
+  )
+
+#creating regression models
+colors<- c("CI" = "blue", "PI" = "red")
+ggplot(d, aes(x=Brain_Size_Species_Mean, y=MaxLongevity_m)) + geom_point() + geom_smooth(method = "lm", se = FALSE, color = "black") + annotate("text", label = "longevity ~ brain size", x = 150, y = 950, size = 4, colour = "red") + geom_line(data = ci, aes(x= Brain_Size_Species_Mean, y = c.lwr), color = "blue") + geom_line(data = ci, aes(x = Brain_Size_Species_Mean, y = c.upr, color = "CI")) + geom_line(data = ci, aes(x = Brain_Size_Species_Mean, y = p.lwr, color = "PI")) + geom_line(data = ci, aes(x = Brain_Size_Species_Mean, y = p.upr), color = "red") + guides(col = guide_legend()) + labs(x = "Species Average Brain Size", y = "Max Longevity") +  scale_color_manual(name = "Legend", values = colors)
+
+#predicting the longevity at 750gm Brain Size
+coeffs = coefficients(model)
+brain = 750          
+longevity = coeffs[1] + coeffs[2]*brain 
+longevity 
+
+pi750 <- predict(model,
+  newdata = data.frame(Brain_Size_Species_Mean = 750),
+  interval = "prediction", level = 0.9)
+pi750
+#The longevity of a species with a 750 mg brain is 1162.445 +/- 196
+
+#Doing it for log-transformed data
+log_model<- lm(log(MaxLongevity_m) ~ log(Brain_Size_Species_Mean), data=d)
+summary(log_model)
+
+#90% CI for the slope 
+alpha<-.1
+(CI <- tidy(log_model, conf.int = TRUE, conf.level = 1-alpha))
+
+#90% Confidence Intervals 
+sd <- glance(log_model) %>% pull(sigma) # sd deviation of residuals
+ci <- log_model %>% augment() %>%
+  mutate(
+    c.lwr = .fitted - qt(1 - alpha / 2, nrow(d) - 2) * .se.fit,
+    c.upr = .fitted + qt(1 - alpha / 2, nrow(d) - 2) * .se.fit,
+    se.prediction = sqrt(sd^2 + .se.fit^2),
+    p.lwr = .fitted - qt(1 - alpha / 2, nrow(d) - 2) * se.prediction,
+    p.upr = .fitted + qt(1 - alpha / 2, nrow(d) - 2) * se.prediction
+  )
+
+ggplot(d, aes(x=log(Brain_Size_Species_Mean), y=log(MaxLongevity_m))) + geom_point() + geom_smooth(method = "lm", se = FALSE, color = "black") + annotate("text", label = "log(longevity) ~ log(brain size)", x = 2.55, y = 6.65, size = 4, colour = "red") + geom_line(data = ci, aes(x= log.Brain_Size_Species_Mean., y = c.lwr, color = "CI")) + geom_line(data = ci, aes(x = log.Brain_Size_Species_Mean., y = c.upr), color = "blue") + geom_line(data = ci, aes(x = log.Brain_Size_Species_Mean., y = p.lwr, color = "PI")) + geom_line(data = ci, aes(x = log.Brain_Size_Species_Mean., y = p.upr), color = "red") + labs(x = "Species Average Brain Size", y = "Max Longevity") +  scale_color_manual(name = "Legend", values = colors)
+
+#predicting the longevity at 750gm Brain Size
+coeffs = coefficients(log_model)
+brain = log(750)       
+longevity = coeffs[1] + coeffs[2]*brain 
+longevity 
+
+pi750 <- predict(log_model,
+  newdata = data.frame(Brain_Size_Species_Mean = 750),
+  interval = "prediction", level = 0.9)
+pi750
+#The longevity of a species with a 750 mg brain on the log scale is 6.429 +/- .422
+
+#The log transformed model is better because more of the points fall on the line created by the regression.
 ```
 
-## R Markdown
+##Challenge 2
+```{r}
+homerange_model<- lm(log(HomeRange_km2) ~ log(Body_mass_female_mean), data = d)
+summary(homerange_model) 
+#The slope is 1.036 and the intercept is -9.441
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+##Challenge 3
+```{r}
+boot_lm<- function()
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
