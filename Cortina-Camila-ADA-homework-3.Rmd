@@ -14,6 +14,7 @@ library(tidyverse)
 library(ggplot2)
 library(tidyr)
 library(broom)
+library(infer)
 #importing dataset
 d<- read_csv("KamilarAndCooperData.csv", col_names = TRUE)
 
@@ -51,6 +52,7 @@ pi750 <- predict(model,
   interval = "prediction", level = 0.9)
 pi750
 #The longevity of a species with a 750 mg brain is 1162.445 +/- 196
+#I do not trust the model to make predictions about the longevity at this large of a brain size because there are very few points as the brain size gets larger and the confidence levels are very wide at this point, coming closer and closer to the prediction intervals as the brain size gets larger, which are not a good prediction of the longevity. 
 
 #Doing it for log-transformed data
 log_model<- lm(log(MaxLongevity_m) ~ log(Brain_Size_Species_Mean), data=d)
@@ -84,8 +86,9 @@ pi750 <- predict(log_model,
   interval = "prediction", level = 0.9)
 pi750
 #The longevity of a species with a 750 mg brain on the log scale is 6.429 +/- .422
+ 
 
-#The log transformed model is better because more of the points fall on the line created by the regression.
+#The log transformed model is better because more of the points fall on the line created by the regression. In the untransformed model, most of the points are centered on the left-hand side of the graph and therefore the prediction of where the points will be with larger brain sizes is less accurate. This can be seen in the confidence interval and how it is further away from the line the larger the brain size is. 
 ```
 
 ##Challenge 2
@@ -94,10 +97,131 @@ homerange_model<- lm(log(HomeRange_km2) ~ log(Body_mass_female_mean), data = d)
 summary(homerange_model) 
 #The slope is 1.036 and the intercept is -9.441
 
+#bootstrap to sample the model 1000 times, got it to work with the for loop too
+d$logHomeRange<- log(d$HomeRange_km2)
+d$logBody<- log(d$Body_mass_female_mean)
+boot.slope <- d %>%
+  specify(logHomeRange ~ logBody) %>%
+  generate(reps = 1000, type = "bootstrap") %>%
+  calculate(stat = "slope")
+head(boot.slope)
+
+n_boot <- 1000
+boot <- vector(length = n_boot) 
+boot.slope <- vector(length = n_boot) #maybe take out
+n <- length(d)
+for (i in 1:1000) {
+  d_temp<- dplyr::sample_n(d, n, replace = TRUE)
+  #d_temp$logHomeRange<- log(d_temp$HomeRange_km2)
+  #d_temp$logBody<- log(d_temp$Body_mass_female_mean)
+  boot[[i]] <- coefficients(lm(log(HomeRange_km2) ~ log(Body_mass_female_mean), data = d_temp))[1]
+   boot.slope[[i]] <- coefficients(lm(log(HomeRange_km2) ~ log(Body_mass_female_mean), data = d_temp))[2]
+}
+
+#plotting the histogram
+hist(boot.slope,
+  main = "Histogram of Bootstrapped\nSlope Values",
+  xlab = "Slope Coefficient")
+
+hist(boot, xlab = "Intercept Coefficients", main = "Bootstrapped Sampling Distribution \n of Intercept Values")
+
+#Standard Error for B coefficients
+# first define alpha, CI boundaries, and critical values
+alpha <- 0.05
+confidence_level <- 1 - alpha
+p_lower <- alpha / 2
+p_upper <- 1 - (alpha / 2)
+degrees_of_freedom <- nrow(d) - 2
+critical_value <- qt(p_upper, df = degrees_of_freedom)
+
+#Estimate the SE and the CI for slope
+boot.slope<- data.frame(boot.slope)
+boot.slope.summary <- boot.slope %>%
+  summarize(
+    estimate = mean(boot.slope),
+    std.error = sd(boot.slope),
+    # calculate the CI based on the quantile (percentile)  method
+    boot.lower = quantile(boot.slope, p_lower),
+    boot.upper = quantile(boot.slope, p_upper)
+  )
+boot.slope.summary
+
+#Estimate the SE and the CI for intercept 
+boot<- data.frame(boot)
+boot.int.summary <- boot %>%
+  summarize(
+    estimate = mean(boot),
+    std.error = sd(boot),
+    # calculate the CI based on the quantile (percentile)  method
+    boot.lower = quantile(boot, p_lower),
+    boot.upper = quantile(boot, p_upper)
+  )
+boot.int.summary
+
+#The SEs estimated by bootstrapping are slightly lower (.0771) than using the lm function (.08488) for the slope, but higher for the intercept (1.444 vs. .673)
+
+#The CIs from bootstrapping are slightly lower when using the lm function than with bootstrapping
+confint(homerange_model)
+
 ```
 
 ##Challenge 3
 ```{r}
-boot_lm<- function()
+boot_lm<- function(d, model, conf.level = .95, reps = 1000){
+  model<- lm(model, data = d)
+  model_coeffs<- summary(model)
+  n_boot <- reps
+  boot <- vector(length = n_boot) 
+  boot.slope <- vector(length = n_boot)
+  n <- length(d)
+for (i in 1:reps) {
+  d_temp<- dplyr::sample_n(d, n, replace = TRUE)
+  boot[[i]] <- coefficients(lm(model, data = d_temp))[1]
+  boot.slope[[i]] <- coefficients(lm(model, data = d_temp))[2]
+}
+  alpha <- 1 - conf.level
+confidence_level <- conf.level
+p_lower <- alpha / 2
+p_upper <- 1 - (alpha / 2)
+degrees_of_freedom <- nrow(d) - 2
+critical_value <- qt(p_upper, df = degrees_of_freedom)
+
+#Estimate the SE and the CI for slope
+boot.slope<- data.frame(boot.slope)
+boot.slope.summary <- boot.slope %>%
+  summarize(
+    estimate = mean(boot.slope),
+    std.error = sd(boot.slope),
+    # calculate the CI based on the quantile (percentile)  method
+    boot.lower = quantile(boot.slope, p_lower),
+    boot.upper = quantile(boot.slope, p_upper)
+  )
+#Estimate the SE and the CI for intercept 
+boot<- data.frame(boot)
+boot.int.summary <- boot %>%
+  summarize(
+    estimate = mean(boot),
+    std.error = sd(boot),
+    # calculate the CI based on the quantile (percentile)  method
+    boot.lower = quantile(boot, p_lower),
+    boot.upper = quantile(boot, p_upper)
+  )
+final_return<- list(model_coeffs, boot, boot.slope, boot.slope.summary, boot.int.summary)
+return(final_return)
+
+}
+#Running the function for the following models:
+#log(HomeRange_km2) ~ log(Body_mass_female_mean)
+boot_lm(d = d, model = "log(HomeRange_km2) ~ log(Body_mass_female_mean)")
+#log(HomeRange_km2) ~ log(Body_mass_female_mean)
+boot_lm(d =d, model = "log(HomeRange_km2) ~ log(Body_mass_female_mean)")
+#log(HomeRange_km2) ~ log(Body_mass_female_mean) + MeanGroupSize
+boot_lm(d = d, model = "log(HomeRange_km2) ~ log(Body_mass_female_mean) + MeanGroupSize")
 ```
+
+##Extra Credit
+
+
+
+
 
