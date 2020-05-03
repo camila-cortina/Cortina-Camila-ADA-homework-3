@@ -206,7 +206,7 @@ boot.int.summary <- boot %>%
     boot.lower = quantile(boot, p_lower),
     boot.upper = quantile(boot, p_upper)
   )
-final_return<- list(model_coeffs, boot, boot.slope, boot.slope.summary, boot.int.summary)
+final_return<- list(model_coeffs, mean(boot$boot), mean(boot.slope$boot.slope), boot.slope.summary, boot.int.summary)
 return(final_return)
 
 }
@@ -220,6 +220,24 @@ boot_lm(d = d, model = "log(HomeRange_km2) ~ log(Body_mass_female_mean) + MeanGr
 ```
 
 ##Extra Credit
+```{r}
+boot_reps = seq(from = 10, to = 200, by = 10)
+extra_output <- array(list(), 20)
+for (i in 1:20) {
+extra_output[[i]]<- boot_lm(d = d, model = "log(HomeRange_km2) ~ log(Body_mass_female_mean)", reps = boot_reps[i])
+}
+mean_output<- vector(length = 20) 
+lower_CI<- vector(length = 20)
+upper_CI<- vector(length = 20)
+for (i in 1:20) {
+mean_output[[i]] <- extra_output[[i]][[3]]  
+lower_CI[[i]] <- extra_output[[i]][[4]]$boot.lower
+upper_CI[[i]]<- extra_output[[i]][[4]]$boot.upper
+}
+plot_output<- data.frame(mean = mean_output, lower_CI = lower_CI, upper_CI = upper_CI, reps = seq(from = 10, to = 200, by = 10))
+
+ggplot(plot_output, aes(x = reps, y = mean)) + geom_line() + geom_line(data = plot_output, aes(x = reps, y = lower_CI)) + geom_line(data = plot_output, aes(x = reps, y = upper_CI)) + geom_hline(yintercept = 1.03, color = "red")
+```
 
 
 
